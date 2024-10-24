@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Playground</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            background-color: #f0f0f0;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .left-column, .right-column {
+            flex: 1;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        textarea, select, input[type="range"], input[type="number"] {
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>My Playground</h1>
+    {% if error_message %}
+        <p style="color: red; text-align: center;">{{ error_message }}</p>
+    {% endif %}
+    <div class="container">
+        <div class="left-column">
+            <label for="user_input">Your Message:</label>
+            <textarea id="user_input" name="user_input" rows="6" required></textarea>
+            
+            <button onclick="sendMessage()">Submit</button>
+            
+            <h2>History:</h2>
+            <textarea id="response" name="response" rows="10" readonly></textarea>
+        </div>
+        
+        <div class="right-column">
+            <label for="model">Choose a Model:</label>
+            <select id="model" name="model">
+                <option value="llama3-8b-8192">llama3-8b-8192</option>
+                <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option> 
+                <option value="llama3-groq-8b-8192-tool-use-preview">Llama 3 Groq 8B Tool Use (Preview)</option>
+                <option value="llama-3.2-1b-preview">Llama 3.2 1B (Preview)</option>  
+            </select>
+            
+            <label for="temperature">Temperature: <span id="temperatureValue">0.5</span></label>
+            <input type="range" id="temperature" name="temperature" min="0" max="2" step="0.1" value="0.5">
+            
+            <label for="system_prompt">System Prompt:</label>
+            <textarea id="system_prompt" name="system_prompt" rows="4" placeholder="Enter system prompt here"></textarea>
+            
+            <label for="max_tokens">Max Tokens:</label>
+            <input type="number" id="max_tokens" name="max_tokens" value="8064" min="1">
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('temperature').addEventListener('input', function() {
+            document.getElementById('temperatureValue').textContent = this.value;
+        });
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // New feature: Conversation history
+        let conversationHistory = [];
+
+        function sendMessage() {
+            const userInput = document.getElementById('user_input').value;
+            const systemPrompt = document.getElementById('system_prompt').value;
+            const model = document.getElementById('model').value;
+            const temperature = parseFloat(document.getElementById('temperature').value);
+            const maxTokens = parseInt(document.getElementById('max_tokens').value);
+
+            // Add user input to conversation history
+            conversationHistory.push({ role: 'user', content: userInput });
+
+            fetch('/playground/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    user_input: userInput,
+                    system_prompt: systemPrompt,
+                    model: model,
+                    temperature: temperature,
+                    max_tokens: maxTokens
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('response').value = `Error: ${data.error}`;
+                } else {
+                    // Add AI response to conversation history
+                    conversationHistory.push({ role: 'assistant', content: data.response });
+                    updateConversationDisplay();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('response').value = 'An error occurred. Please try again.';
+            });
+        }
+
+        // New function to update the display with the conversation history
+        function updateConversationDisplay() {
+            const responseArea = document.getElementById('response');
+            let displayText = '';
+
+            conversationHistory.forEach((message, index) => {
+                if (index > 0) displayText += '\n\n'; // Add space between messages
+                displayText += `${message.role === 'user' ? 'You' : 'AI'}: ${message.content}`;
+            });
+
+            responseArea.value = displayText;
+            responseArea.scrollTop = responseArea.scrollHeight; // Scroll to bottom
+        }
+
+        // New function to create and show tooltips
+        function createTooltip(element, text) {
+            const tooltip = document.createElement('div');
+            tooltip.textContent = text;
+            tooltip.style.position = 'absolute';
+            tooltip.style.backgroundColor = 'black';
+            tooltip.style.color = 'white';
+            tooltip.style.padding = '5px';
+            tooltip.style.borderRadius = '3px';
+            tooltip.style.fontSize = '12px';
+            tooltip.style.zIndex = '1000';
+            tooltip.style.display = 'none';
+            document.body.appendChild(tooltip);
+
+            element.addEventListener('mouseover', (e) => {
+                const rect = element.getBoundingClientRect();
+                tooltip.style.left = `${rect.left}px`;
+                tooltip.style.top = `${rect.bottom + 5}px`;
+                tooltip.style.display = 'block';
+            });
+
+            element.addEventListener('mouseout', () => {
+                tooltip.style.display = 'none';
+            });
+        }
+
+        // Add tooltips to parameters
+        document.addEventListener('DOMContentLoaded', () => {
+            createTooltip(
+                document.getElementById('model'),
+                'The AI model to use for generating responses.'
+            );
+            createTooltip(
+                document.getElementById('temperature'),
+                'Controls randomness in output. Higher values make output more random, lower values make it more deterministic.'
+            );
+            createTooltip(
+                document.getElementById('system_prompt'),
+                'Initial instructions for the AI to set context or behavior.'
+            );
+            createTooltip(
+                document.getElementById('max_tokens'),
+                'The maximum number of tokens (words or word pieces) in the generated response.'
+            );
+        });
+    </script>
+</body>
+</html>
